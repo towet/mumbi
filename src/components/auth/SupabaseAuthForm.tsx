@@ -221,12 +221,7 @@ export function SupabaseAuthForm({ onAuthSuccess }: SupabaseAuthFormProps) {
         
         <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
           <CardHeader className="pb-4">
-            <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-farm-green to-emerald-600 bg-clip-text text-transparent">
-              Mumbi Farm Management
-            </CardTitle>
-            <CardDescription className="text-center">
-              Sign in to access your farm dashboard
-            </CardDescription>
+            {/* Title and description removed as requested */}
           </CardHeader>
           
           <Tabs
