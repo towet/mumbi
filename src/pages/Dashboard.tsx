@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentActivities } from "@/components/dashboard/RecentActivities";
+import { FlockGrowthChart } from "@/components/dashboard/FlockGrowthChart";
 import { Button } from "@/components/ui/button";
 import { Calendar, Plus, AlertCircle, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -43,26 +45,25 @@ export default function Dashboard() {
       
       if (error) throw error;
       
-      setUpcomingTasks(data.map(task => ({
-        id: task.id,
-        title: task.title,
-        date: format(new Date(task.due_date), 'PP'),
-        dueDate: task.due_date,
-        status: task.status,
-        priority: task.priority,
-        type: task.type,
-        animalName: task.animals?.name,
-        animalTag: task.animals?.tag_number
-      })));
+      if (data && data.length > 0) {
+        setUpcomingTasks(data.map(task => ({
+          id: task.id,
+          title: task.title,
+          date: format(new Date(task.due_date), 'PP'),
+          dueDate: task.due_date,
+          status: task.status,
+          priority: task.priority,
+          type: task.type,
+          animalName: task.animals?.name,
+          animalTag: task.animals?.tag_number
+        })));
+      } else {
+        setUpcomingTasks([]);
+      }
     } catch (error) {
       console.error('Error fetching upcoming tasks:', error);
-      // Use mock data as fallback
-      setUpcomingTasks([
-        { id: 1, title: "Vaccination Schedule", date: "Today, 2:00 PM" },
-        { id: 2, title: "Feed Inventory Check", date: "Tomorrow, 9:00 AM" },
-        { id: 3, title: "Veterinarian Visit", date: "Aug 12, 10:30 AM" },
-        { id: 4, title: "Shearing Preparation", date: "Aug 14, 8:00 AM" },
-      ]);
+      toast.error("Failed to load upcoming tasks");
+      setUpcomingTasks([]);
     } finally {
       setLoading(false);
     }
@@ -89,17 +90,14 @@ export default function Dashboard() {
                 <Calendar className="h-4 w-4 text-farm-green" />
                 <span className="inline text-farm-green">Today</span>
               </Button>
-              <Button 
-                className="flex items-center gap-2 bg-gradient-to-r from-farm-green to-emerald-500 hover:opacity-90 transition-all duration-300 rounded-full shadow-md hover:shadow-lg flex-1 sm:flex-auto justify-center"
-                onClick={() => navigate('/animals/register')}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="inline">Add Animal</span>
-              </Button>
             </div>
           </div>
           
           <DashboardStats />
+          
+          <div className="mt-4">
+            <FlockGrowthChart />
+          </div>
         </section>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">

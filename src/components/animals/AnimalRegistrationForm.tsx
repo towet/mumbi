@@ -108,7 +108,8 @@ export default function AnimalRegistrationForm() {
         birth_date: format(values.dob, "yyyy-MM-dd"),
         weight_kg: values.weightAtBirth,
         health_status: "Healthy", // Default health status for new animals
-        notes: formatNotes(values)
+        notes: formatNotes(values),
+        description: values.description // Add direct field for description/notes
       };
       
       // Insert the data into Supabase

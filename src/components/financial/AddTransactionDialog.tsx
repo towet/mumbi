@@ -30,7 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -57,7 +57,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export function AddTransactionDialog({ open, onOpenChange, onSuccess }: AddTransactionDialogProps) {
-  const { toast } = useToast();
+  // Using sonner toast
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [animals, setAnimals] = useState<Array<{ id: string, name: string, tag: string }>>([]);
   
@@ -119,16 +119,30 @@ export function AddTransactionDialog({ open, onOpenChange, onSuccess }: AddTrans
         animal_id: data.relatedTo === 'Animal' ? data.animalId : null
       };
       
-      // Insert into Supabase
-      const { error } = await supabase
+      // Get the current user if available
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData?.user;
+      
+      // Add user info to transaction data
+      const transactionWithUser = {
+        ...transactionData,
+        created_by: currentUser?.id || null
+      };
+      
+      // Insert into Supabase with returning data to confirm
+      const { data: insertedData, error } = await supabase
         .from('financial_transactions')
-        .insert(transactionData);
+        .insert(transactionData)
+        .select();
+      
+      if (!error && (!insertedData || insertedData.length === 0)) {
+        throw new Error("Transaction was not saved properly");
+      }
       
       if (error) throw error;
       
-      toast({
-        title: "Transaction Added",
-        description: `Added ${data.type.toLowerCase()} of $${data.amount} for ${data.category}`,
+      toast.success("Transaction Added", {
+        description: `Added ${data.type.toLowerCase()} of KSh ${data.amount} for ${data.category}`
       });
       
       // Reset form and close dialog
@@ -141,10 +155,8 @@ export function AddTransactionDialog({ open, onOpenChange, onSuccess }: AddTrans
       }
     } catch (error: any) {
       console.error('Error adding transaction:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add transaction",
-        variant: "destructive"
+      toast.error("Database Error", {
+        description: error.message || "Failed to add transaction"
       });
     } finally {
       setIsSubmitting(false);
@@ -255,12 +267,11 @@ export function AddTransactionDialog({ open, onOpenChange, onSuccess }: AddTrans
                     <FormLabel>Amount</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2">$</span>
+                        <span className="absolute left-3 top-3 text-gray-500">KSh</span>
                         <Input 
-                          type="number" 
                           placeholder="0.00" 
-                          className="pl-8" 
                           {...field} 
+                          className="pl-12"
                         />
                       </div>
                     </FormControl>

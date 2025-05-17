@@ -1,5 +1,7 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Heart, Users, FileText, TrendingUp, TrendingDown } from "lucide-react";
@@ -104,17 +106,173 @@ const StatCard = ({
 };
 
 export function DashboardStats() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalAnimals: {
+      count: 0,
+      trend: 0,
+      description: "Animals in inventory"
+    },
+    healthStatus: {
+      percent: 0,
+      trend: 0,
+      description: "Animals in good health"
+    },
+    monthlyRevenue: {
+      amount: 0,
+      trend: 0,
+      description: "From sales & services"
+    },
+    pendingTasks: {
+      count: 0,
+      highPriority: 0,
+      trend: 0
+    }
+  });
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current date info for monthly calculations
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      const firstDayOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+      
+      // Last month date range for trend calculations
+      const firstDayLastMonth = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
+      const lastDayLastMonth = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+      
+      // 1. Fetch total animals count
+      const { data: animalData, error: animalError } = await supabase
+        .from('animals')
+        .select('id, status', { count: 'exact' });
+      
+      // 2. Fetch animals count from last month for trend
+      const { data: lastMonthAnimalCount, error: animalTrendError } = await supabase
+        .from('animals')
+        .select('id')
+        .lt('created_at', firstDayOfMonth)
+        .gte('created_at', firstDayLastMonth);
+      
+      // 3. Fetch monthly revenue (current month)
+      const { data: revenueData, error: revenueError } = await supabase
+        .from('financial_transactions')
+        .select('amount, type')
+        .eq('type', 'Income')
+        .gte('date', firstDayOfMonth)
+        .lte('date', lastDayOfMonth);
+      
+      // 4. Fetch last month's revenue for trend
+      const { data: lastMonthRevenue, error: revenueTrendError } = await supabase
+        .from('financial_transactions')
+        .select('amount, type')
+        .eq('type', 'Income')
+        .gte('date', firstDayLastMonth)
+        .lte('date', lastDayLastMonth);
+      
+      // 5. Fetch pending tasks
+      const { data: taskData, error: taskError } = await supabase
+        .from('alerts')
+        .select('id, priority')
+        .or('status.eq.Pending,status.eq.In Progress');
+      
+      // 6. Fetch last month's pending tasks count for trend
+      const { data: lastMonthTasks, error: taskTrendError } = await supabase
+        .from('alerts')
+        .select('id')
+        .or('status.eq.Pending,status.eq.In Progress')
+        .lt('created_at', firstDayOfMonth)
+        .gte('created_at', firstDayLastMonth);
+      
+      // Process the data
+      if (!animalError && animalData) {
+        const totalAnimals = animalData.length;
+        const healthyAnimals = animalData.filter(animal => animal.status === 'Healthy' || animal.status === 'Active').length;
+        const healthPercent = totalAnimals > 0 ? Math.round((healthyAnimals / totalAnimals) * 100) : 0;
+        
+        // Calculate trends
+        const lastMonthAnimalsCount = lastMonthAnimalCount?.length || 0;
+        const animalTrend = lastMonthAnimalsCount > 0 
+          ? Math.round(((totalAnimals - lastMonthAnimalsCount) / lastMonthAnimalsCount) * 100)
+          : 0;
+        
+        // Current month revenue
+        const totalRevenue = revenueData?.reduce((sum, transaction) => {
+          return sum + (typeof transaction.amount === 'number' ? 
+            transaction.amount : parseFloat(transaction.amount) || 0);
+        }, 0) || 0;
+        
+        // Last month revenue
+        const lastMonthTotalRevenue = lastMonthRevenue?.reduce((sum, transaction) => {
+          return sum + (typeof transaction.amount === 'number' ? 
+            transaction.amount : parseFloat(transaction.amount) || 0);
+        }, 0) || 0;
+        
+        const revenueTrend = lastMonthTotalRevenue > 0 
+          ? Math.round(((totalRevenue - lastMonthTotalRevenue) / lastMonthTotalRevenue) * 100)
+          : 0;
+        
+        // Tasks
+        const pendingTasksCount = taskData?.length || 0;
+        const highPriorityTasks = taskData?.filter(task => 
+          task.priority === 'High' || task.priority === 'Urgent'
+        ).length || 0;
+        
+        const lastMonthTasksCount = lastMonthTasks?.length || 0;
+        const taskTrend = lastMonthTasksCount > 0 
+          ? Math.round(((pendingTasksCount - lastMonthTasksCount) / lastMonthTasksCount) * 100)
+          : 0;
+        
+        setStats({
+          totalAnimals: {
+            count: totalAnimals,
+            trend: animalTrend,
+            description: "Animals in inventory"
+          },
+          healthStatus: {
+            percent: healthPercent,
+            trend: 0, // We don't have previous health data for trend
+            description: "Animals in good health"
+          },
+          monthlyRevenue: {
+            amount: totalRevenue,
+            trend: revenueTrend,
+            description: "From sales & services"
+          },
+          pendingTasks: {
+            count: pendingTasksCount,
+            highPriority: highPriorityTasks,
+            trend: taskTrend
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      toast.error("Failed to load dashboard statistics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           title="Total Animals"
-          value="248"
-          description="Sheep in inventory"
+          value={loading ? "Loading..." : `${stats.totalAnimals.count}`}
+          description={stats.totalAnimals.description}
           icon={Users}
           trend={{
-            value: 12,
-            isPositive: true,
+            value: stats.totalAnimals.trend,
+            isPositive: stats.totalAnimals.trend >= 0
           }}
           gradientFrom="from-blue-500/90"
           gradientTo="to-blue-600"
@@ -122,12 +280,12 @@ export function DashboardStats() {
         
         <StatCard
           title="Health Status"
-          value="93%"
-          description="Animals in good health"
+          value={loading ? "Loading..." : `${stats.healthStatus.percent}%`}
+          description={stats.healthStatus.description}
           icon={Heart}
           trend={{
-            value: 4,
-            isPositive: true,
+            value: stats.healthStatus.trend,
+            isPositive: stats.healthStatus.trend >= 0
           }}
           gradientFrom="from-rose-500/90"
           gradientTo="to-pink-600"
@@ -135,12 +293,12 @@ export function DashboardStats() {
         
         <StatCard
           title="Monthly Revenue"
-          value="$24,590"
-          description="From sales & services"
+          value={loading ? "Loading..." : `KSh ${stats.monthlyRevenue.amount.toLocaleString()}`}
+          description={stats.monthlyRevenue.description}
           icon={Activity}
           trend={{
-            value: 8,
-            isPositive: true,
+            value: stats.monthlyRevenue.trend,
+            isPositive: stats.monthlyRevenue.trend >= 0
           }}
           gradientFrom="from-emerald-500/90"
           gradientTo="to-green-600"
@@ -148,12 +306,12 @@ export function DashboardStats() {
         
         <StatCard
           title="Pending Tasks"
-          value="16"
-          description="4 high priority"
+          value={loading ? "Loading..." : `${stats.pendingTasks.count}`}
+          description={`${stats.pendingTasks.highPriority} high priority`}
           icon={FileText}
           trend={{
-            value: 2,
-            isPositive: false,
+            value: stats.pendingTasks.trend,
+            isPositive: stats.pendingTasks.trend <= 0 // For tasks, negative trend is good
           }}
           gradientFrom="from-amber-500/90"
           gradientTo="to-orange-600"

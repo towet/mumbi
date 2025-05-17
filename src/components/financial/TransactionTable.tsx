@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Edit, Trash2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +43,7 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTableProps) {
-  const { toast } = useToast();
+  // Using sonner toast
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,10 +124,8 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
       setExpenseCategories(expenseCats);
     } catch (error) {
       console.error('Error fetching transactions:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load financial transactions",
-        variant: "destructive"
+      toast.error("Database Error", {
+        description: "Failed to load financial transactions. Please try again."
       });
     } finally {
       setLoading(false);
@@ -148,9 +146,8 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
       
       if (error) throw error;
       
-      toast({
-        title: "Transaction Deleted",
-        description: "The transaction has been successfully deleted"
+      toast.success("Transaction Deleted", {
+        description: "Transaction has been removed"
       });
       
       // Refresh the transactions list
@@ -161,10 +158,8 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
       }
     } catch (error: any) {
       console.error('Error deleting transaction:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete transaction",
-        variant: "destructive"
+      toast.error("Database Error", {
+        description: error.message || "Failed to delete transaction"
       });
     } finally {
       setIsDeleting(false);
@@ -280,11 +275,11 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-4 border rounded-lg bg-green-50 border-green-100">
           <p className="text-sm text-muted-foreground">Total Income</p>
-          <p className="text-2xl font-bold text-green-600">${totalIncome.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-green-600">KSh {totalIncome.toFixed(2)}</p>
         </div>
         <div className="p-4 border rounded-lg bg-red-50 border-red-100">
           <p className="text-sm text-muted-foreground">Total Expenses</p>
-          <p className="text-2xl font-bold text-red-600">${totalExpenses.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-red-600">KSh {totalExpenses.toFixed(2)}</p>
         </div>
         <div className="p-4 border rounded-lg bg-blue-50 border-blue-100">
           <p className="text-sm text-muted-foreground">Net Balance</p>
@@ -292,7 +287,7 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
             "text-2xl font-bold",
             netBalance >= 0 ? "text-blue-600" : "text-red-600"
           )}>
-            ${netBalance.toFixed(2)}
+            KSh {netBalance.toFixed(2)}
           </p>
         </div>
       </div>
@@ -355,10 +350,13 @@ export function TransactionTable({ onAddTransaction, onRefresh }: TransactionTab
                       {transaction.type}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
-                    <span className={transaction.type === "Income" ? "text-green-600" : "text-red-600"}>
-                      {transaction.type === "Income" ? "+" : "-"}${transaction.amount.toFixed(2)}
-                    </span>
+                  <TableCell className="text-right">
+                    <div className={cn(
+                      "text-[15px] font-medium",
+                      transaction.type === "Income" ? "text-green-600" : "text-red-600"
+                    )}>
+                      {transaction.type === "Income" ? "+" : "-"} KSh {transaction.amount.toFixed(2)}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

@@ -10,6 +10,7 @@ import Finance from "@/pages/Finance";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
+import Alerts from "@/pages/Alerts";
 import NotFound from "@/pages/NotFound";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -118,6 +119,11 @@ export function AppRoutes() {
       <Route path="/reports" element={
         <ProtectedRoute>
           <Reports />
+        </ProtectedRoute>
+      } />
+      <Route path="/alerts" element={
+        <ProtectedRoute>
+          <Alerts />
         </ProtectedRoute>
       } />
       <Route path="/settings" element={

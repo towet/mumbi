@@ -1,0 +1,376 @@
+import { useState, useRef } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Printer, Download, Loader2, Edit, Save, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+
+// Sample report data - this would be dynamically generated in a real application
+const generateSampleReportData = (reportId: string) => {
+  const reportTypes: Record<string, any> = {
+    "1": {
+      title: "Current Flock Summary",
+      date: new Date().toLocaleDateString(),
+      content: [
+        { header: "Flock Overview", text: "Total animals: 120" },
+        { header: "Breed Distribution", text: "Merino: 40%, Suffolk: 30%, Dorper: 20%, Other: 10%" },
+        { header: "Age Distribution", text: "Under 1 year: 35%, 1-3 years: 40%, 3+ years: 25%" },
+        { header: "Health Status", text: "Healthy: 95%, Requires attention: 5%" },
+        { header: "Vaccination Status", text: "Up to date: 98%, Pending: 2%" }
+      ]
+    },
+    "2": {
+      title: "Breeding Stock Report",
+      date: new Date().toLocaleDateString(),
+      content: [
+        { header: "Breeding Rams", text: "Total: 5, Average age: 2.5 years" },
+        { header: "Breeding Ewes", text: "Total: 45, Average age: 3.2 years" },
+        { header: "Recent Breeding Activity", text: "Matings in last 30 days: 12" },
+        { header: "Expected Births", text: "Next 30 days: 8, Next 60 days: 15" }
+      ]
+    },
+    "3": {
+      title: "Age Distribution",
+      date: new Date().toLocaleDateString(),
+      content: [
+        { header: "Lambs (0-6 months)", text: "Total: 35, Male: 16, Female: 19" },
+        { header: "Juveniles (6-12 months)", text: "Total: 22, Male: 10, Female: 12" },
+        { header: "Adults (1-4 years)", text: "Total: 48, Male: 8, Female: 40" },
+        { header: "Seniors (4+ years)", text: "Total: 15, Male: 3, Female: 12" }
+      ]
+    },
+  };
+
+  return reportTypes[reportId] || {
+    title: "Sample Report",
+    date: new Date().toLocaleDateString(),
+    content: [
+      { header: "No Data Available", text: "This is a placeholder for report data." }
+    ]
+  };
+};
+
+interface PrintPreviewDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  reportId: string;
+  reportName: string;
+}
+
+export function PrintPreviewDialog({ 
+  open, 
+  onOpenChange, 
+  reportId, 
+  reportName 
+}: PrintPreviewDialogProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const reportContentRef = useRef<HTMLDivElement>(null);
+  
+  // Generate sample report data based on the reportId
+  const [reportData, setReportData] = useState(generateSampleReportData(reportId));
+  
+  const handlePrint = () => {
+    setIsLoading(true);
+    
+    setTimeout(() => {
+      const content = reportContentRef.current;
+      if (!content) {
+        setIsLoading(false);
+        return;
+      }
+      
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        toast.error("Unable to open print window. Please check your popup blocker settings.");
+        setIsLoading(false);
+        return;
+      }
+      
+      // Setup the print document
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${reportName} - Print</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                padding: 20px;
+              }
+              .report-header {
+                text-align: center;
+                margin-bottom: 30px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid #ddd;
+              }
+              .report-content {
+                margin-bottom: 20px;
+              }
+              .report-section {
+                margin-bottom: 15px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #eee;
+              }
+              .report-section h3 {
+                margin-top: 0;
+                margin-bottom: 8px;
+                color: #2c6e49;
+              }
+              .report-footer {
+                margin-top: 40px;
+                text-align: center;
+                font-size: 0.8em;
+                color: #666;
+              }
+              @media print {
+                body {
+                  padding: 0;
+                }
+                button {
+                  display: none;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="report-container">
+              ${content.innerHTML}
+              <div class="report-footer">
+                <p>Generated by Mumbi Farm Management on ${new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      setIsLoading(false);
+    }, 1000);
+  };
+  
+  const handleDownload = async () => {
+    setIsLoading(true);
+    
+    try {
+      const content = reportContentRef.current;
+      if (!content) {
+        toast.error("Could not generate PDF. Please try again.");
+        setIsLoading(false);
+        return;
+      }
+      
+      // Create a clone of the content to ensure we capture it without any edit buttons
+      const printableContent = content.cloneNode(true) as HTMLElement;
+      
+      // Set a white background to ensure PDF renders correctly
+      printableContent.style.backgroundColor = 'white';
+      printableContent.style.padding = '20px';
+      document.body.appendChild(printableContent);
+      
+      // Use html2canvas to convert the HTML to a canvas
+      const canvas = await html2canvas(printableContent, {
+        scale: 2, // Higher scale for better quality
+        logging: false,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      document.body.removeChild(printableContent);
+      
+      // Calculate PDF dimensions based on canvas with a fixed width of 210mm (A4 width)
+      const imgWidth = 210;
+      const imgHeight = canvas.height * imgWidth / canvas.width;
+      
+      // Create PDF with A4 dimensions
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // Add a title to the PDF
+      pdf.setFontSize(16);
+      pdf.text(`${reportName}`, 105, 15, { align: 'center' });
+      pdf.setFontSize(10);
+      pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
+      
+      // Add the image to the PDF
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 30, imgWidth, imgHeight);
+      
+      // Add footer
+      const pageCount = pdf.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.text(
+          `Page ${i} of ${pageCount} - Generated by Mumbi Farm Management`,
+          105,
+          pdf.internal.pageSize.height - 10,
+          { align: 'center' }
+        );
+      }
+      
+      // Save the PDF
+      pdf.save(`${reportName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      toast.success("Report downloaded successfully", {
+        description: `${reportName} has been saved as a PDF.`,
+      });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast.error("Failed to generate PDF", {
+        description: "An error occurred while creating your PDF. Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl">Print Preview: {reportName}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="py-4">
+          <div 
+            ref={reportContentRef}
+            className="preview-container border rounded-lg p-6 bg-white"
+          >
+            <div className="report-header">
+              <h2 className="text-2xl font-bold text-farm-green">{reportData.title}</h2>
+              <p className="text-gray-500">Generated on {reportData.date}</p>
+            </div>
+            
+            <div className="report-content space-y-6">
+              {reportData.content.map((section: any, index: number) => (
+                <div key={index} className="report-section">
+                  {isEditMode ? (
+                    <>
+                      <Input
+                        value={section.header}
+                        onChange={(e) => {
+                          const updatedContent = [...reportData.content];
+                          updatedContent[index] = { ...updatedContent[index], header: e.target.value };
+                          setReportData({ ...reportData, content: updatedContent });
+                        }}
+                        className="font-medium text-lg mb-2"
+                      />
+                      <Textarea
+                        value={section.text}
+                        onChange={(e) => {
+                          const updatedContent = [...reportData.content];
+                          updatedContent[index] = { ...updatedContent[index], text: e.target.value };
+                          setReportData({ ...reportData, content: updatedContent });
+                        }}
+                        className="min-h-[80px]"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-lg font-medium">{section.header}</h3>
+                      <p>{section.text}</p>
+                    </>
+                  )}
+                </div>
+              ))}
+              {isEditMode && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    const newContent = [...reportData.content, { header: "New Section", text: "Enter content here" }];
+                    setReportData({ ...reportData, content: newContent });
+                  }}
+                  className="w-full mt-4"
+                >
+                  + Add New Section
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="flex flex-wrap gap-2 sm:gap-0 justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          
+          {isEditMode ? (
+            <>
+              <Button 
+                type="button" 
+                variant="destructive" 
+                onClick={() => {
+                  setIsEditMode(false);
+                  setReportData(generateSampleReportData(reportId)); // Reset to original data
+                }}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Cancel Edits
+              </Button>
+              <Button 
+                type="button" 
+                className="bg-farm-green hover:bg-farm-green/90"
+                onClick={() => {
+                  setIsEditMode(false);
+                  toast.success("Report edits saved");
+                }}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Save Changes
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                type="button" 
+                variant="secondary"
+                onClick={() => setIsEditMode(true)}
+                disabled={isLoading}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Report
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={handleDownload}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Download PDF
+              </Button>
+              <Button 
+                type="button" 
+                className="bg-farm-green hover:bg-farm-green/90"
+                onClick={handlePrint}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="mr-2 h-4 w-4" />
+                )}
+                Print
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

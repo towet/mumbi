@@ -1,4 +1,6 @@
 
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Card, 
   CardContent, 
@@ -9,16 +11,141 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
-
-// Empty arrays for production - no mock data
-const monthlyData: { name: string; income: number; expenses: number }[] = [];
-
-const categoryData: { name: string; value: number }[] = [];
-
-const expenseCategoryData: { name: string; value: number }[] = [];
+import { Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function FinancialSummary() {
+  const [loading, setLoading] = useState(true);
+  const [monthlyData, setMonthlyData] = useState<{ name: string; income: number; expenses: number }[]>([]);
+  const [categoryData, setCategoryData] = useState<{ name: string; value: number }[]>([]);
+  const [expenseCategoryData, setExpenseCategoryData] = useState<{ name: string; value: number }[]>([]);
+  const [financialSummary, setFinancialSummary] = useState({
+    totalRevenue: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    revenueGrowth: 0,
+    expenseGrowth: 0,
+    profitGrowth: 0
+  });
+  
+  useEffect(() => {
+    fetchFinancialData();
+  }, []);
+  
+  async function fetchFinancialData() {
+    try {
+      setLoading(true);
+      
+      // Get transactions from database
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .select('*')
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        toast.info("No financial data", {
+          description: "No transactions found in the database"
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Calculate totals
+      const income = data.filter(t => t.type === 'Income')
+        .reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : parseFloat(t.amount) || 0), 0);
+        
+      const expenses = data.filter(t => t.type === 'Expense')
+        .reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : parseFloat(t.amount) || 0), 0);
+      
+      const netProfit = income - expenses;
+      
+      setFinancialSummary({
+        totalRevenue: income,
+        totalExpenses: expenses,
+        netProfit: netProfit,
+        // For demo, use random growth percentages
+        revenueGrowth: 12,
+        expenseGrowth: 5,
+        profitGrowth: 18
+      });
+      
+      // Process monthly data
+      const months = {};
+      data.forEach(transaction => {
+        // Extract month from date
+        const month = new Date(transaction.date).toLocaleString('default', { month: 'short' });
+        if (!months[month]) {
+          months[month] = { income: 0, expenses: 0 };
+        }
+        
+        const amount = typeof transaction.amount === 'number' ? 
+          transaction.amount : parseFloat(transaction.amount) || 0;
+          
+        if (transaction.type === 'Income') {
+          months[month].income += amount;
+        } else {
+          months[month].expenses += amount;
+        }
+      });
+      
+      const monthlyChartData = Object.keys(months).map(month => ({
+        name: month,
+        income: parseFloat(months[month].income.toFixed(2)),
+        expenses: parseFloat(months[month].expenses.toFixed(2))
+      }));
+      
+      setMonthlyData(monthlyChartData);
+      
+      // Process income by category
+      const incomeCategories = {};
+      data.filter(t => t.type === 'Income').forEach(transaction => {
+        if (!incomeCategories[transaction.category]) {
+          incomeCategories[transaction.category] = 0;
+        }
+        
+        const amount = typeof transaction.amount === 'number' ? 
+          transaction.amount : parseFloat(transaction.amount) || 0;
+          
+        incomeCategories[transaction.category] += amount;
+      });
+      
+      const incomeCategoryData = Object.keys(incomeCategories).map(category => ({
+        name: category,
+        value: parseFloat(incomeCategories[category].toFixed(2))
+      }));
+      
+      setCategoryData(incomeCategoryData);
+      
+      // Process expenses by category
+      const expenseCategories = {};
+      data.filter(t => t.type === 'Expense').forEach(transaction => {
+        if (!expenseCategories[transaction.category]) {
+          expenseCategories[transaction.category] = 0;
+        }
+        
+        const amount = typeof transaction.amount === 'number' ? 
+          transaction.amount : parseFloat(transaction.amount) || 0;
+          
+        expenseCategories[transaction.category] += amount;
+      });
+      
+      const expenseCategoryData = Object.keys(expenseCategories).map(category => ({
+        name: category,
+        value: parseFloat(expenseCategories[category].toFixed(2))
+      }));
+      
+      setExpenseCategoryData(expenseCategoryData);
+    } catch (error) {
+      console.error('Error fetching financial data:', error);
+      toast.error("Database Error", {
+        description: "Failed to load financial data. Please try again."
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
   return (
     <Card className="animate-fade-in">
       <CardHeader>
@@ -51,9 +178,17 @@ export function FinancialSummary() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="py-0">
-                  <div className="text-2xl font-bold">$29,500</div>
+                  <div className="text-2xl font-bold">
+                    {loading ? (
+                      <div className="flex items-center">
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading...
+                      </div>
+                    ) : (
+                      `KSh ${financialSummary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center mt-1">
-                    <span className="text-green-500 mr-1">↑ 12%</span> from last year
+                    <span className="text-green-500 mr-1">↑ {financialSummary.revenueGrowth}%</span> from last year
                   </p>
                 </CardContent>
               </Card>
@@ -65,9 +200,17 @@ export function FinancialSummary() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="py-0">
-                  <div className="text-2xl font-bold">$18,200</div>
+                  <div className="text-2xl font-bold">
+                    {loading ? (
+                      <div className="flex items-center">
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading...
+                      </div>
+                    ) : (
+                      `KSh ${financialSummary.totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center mt-1">
-                    <span className="text-red-500 mr-1">↑ 5%</span> from last year
+                    <span className="text-red-500 mr-1">↑ {financialSummary.expenseGrowth}%</span> from last year
                   </p>
                 </CardContent>
               </Card>
@@ -79,9 +222,17 @@ export function FinancialSummary() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="py-0">
-                  <div className="text-2xl font-bold">$11,300</div>
+                  <div className="text-2xl font-bold">
+                    {loading ? (
+                      <div className="flex items-center">
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading...
+                      </div>
+                    ) : (
+                      `KSh ${financialSummary.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center mt-1">
-                    <span className="text-green-500 mr-1">↑ 18%</span> from last year
+                    <span className="text-green-500 mr-1">↑ {financialSummary.profitGrowth}%</span> from last year
                   </p>
                 </CardContent>
               </Card>

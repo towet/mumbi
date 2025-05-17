@@ -87,7 +87,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                     }}
                   >
                     <div className="h-40 w-40 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center p-2">
-                      <img src="/LOGOFARM.png" alt="Mumbi Farm Logo" className="w-full h-full object-contain" />
+                      <img src="/Mumbi Farm Logo-01.png" alt="Mumbi Farm Logo" className="w-full h-full object-contain" />
                     </div>
                     <motion.div 
                       className="absolute inset-0 rounded-full"

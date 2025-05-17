@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandList,
 } from "@/components/ui/command";
 
 interface AddAlertDialogProps {
@@ -60,9 +62,11 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialogProps) {
-  const { toast } = useToast();
+  const { toast: useToastHook } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [animals, setAnimals] = useState<Array<{ id: string, name: string, tag: string }>>([]);
+  const [isLoadingAnimals, setIsLoadingAnimals] = useState(false);
+  const [animalFetchFailed, setAnimalFetchFailed] = useState(false);
   
   useEffect(() => {
     if (open) {
@@ -71,6 +75,9 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
   }, [open]);
   
   const fetchAnimals = async () => {
+    setIsLoadingAnimals(true);
+    setAnimalFetchFailed(false);
+    
     try {
       const { data, error } = await supabase
         .from('animals')
@@ -78,15 +85,21 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
       
       if (error) throw error;
       
-      setAnimals(data.map(animal => ({
+      // Map the data to our format (will be empty array if no data)
+      setAnimals(data?.map(animal => ({
         id: animal.id,
         name: animal.name,
         tag: animal.tag_number
-      })));
+      })) || []);
     } catch (error) {
       console.error('Error fetching animals:', error);
-      // Fallback to empty array
+      setAnimalFetchFailed(true);
+      toast.error("Database Error", {
+        description: "Could not load animals from database"
+      });
       setAnimals([]);
+    } finally {
+      setIsLoadingAnimals(false);
     }
   };
   
@@ -109,7 +122,24 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
     setIsSubmitting(true);
     
     try {
-      // Prepare the data for Supabase
+      // Get the current user if available
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData?.user;
+      
+      // Verify animal exists if one is selected
+      if (data.relatedTo === 'Animal' && data.animalId) {
+        const { data: animalData, error: animalError } = await supabase
+          .from('animals')
+          .select('id')
+          .eq('id', data.animalId)
+          .single();
+          
+        if (animalError || !animalData) {
+          throw new Error("Selected animal not found in database");
+        }
+      }
+      
+      // Prepare the data for Supabase with proper typing
       const alertData = {
         title: data.title,
         description: data.description,
@@ -118,35 +148,40 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
         status: data.status,
         due_date: data.dueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
         animal_id: data.relatedTo === 'Animal' ? data.animalId : null,
-        created_by: null // We would set this if we had a user system
+        created_by: currentUser?.id || null
       };
       
-      // Insert into Supabase
-      const { error } = await supabase
+      // Insert into Supabase with returning data to confirm
+      const { data: insertedData, error } = await supabase
         .from('alerts')
-        .insert(alertData);
+        .insert(alertData)
+        .select();
       
       if (error) throw error;
       
-      toast({
-        title: "Alert Added",
-        description: `Added new ${data.priority.toLowerCase()} priority ${data.type.toLowerCase()}`,
+      if (!insertedData || insertedData.length === 0) {
+        throw new Error("Alert was not saved properly");
+      }
+      
+      toast.success("Alert Added", {
+        description: `Added new ${data.priority.toLowerCase()} priority ${data.type.toLowerCase()}`
       });
       
       // Reset form and close dialog
       form.reset();
       onOpenChange(false);
       
-      // Call onSuccess callback to refresh alerts list
+      // Trigger alert-added event to refresh the alerts list
+      window.dispatchEvent(new Event('alert-added'));
+      
+      // Call onSuccess callback if provided
       if (onSuccess) {
         onSuccess();
       }
     } catch (error: any) {
       console.error('Error adding alert:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add alert",
-        variant: "destructive"
+      toast.error("Database Error", {
+        description: error.message || "Failed to add alert"
       });
     } finally {
       setIsSubmitting(false);
@@ -342,15 +377,31 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
                         <PopoverContent className="p-0">
                           <Command>
                             <CommandInput placeholder="Search animals..." />
-                            <CommandEmpty>No animal found.</CommandEmpty>
-                            <CommandGroup className="max-h-60 overflow-y-auto">
-                              {animals.map((animal) => (
-                                <CommandItem
-                                  key={animal.id}
-                                  value={animal.id}
-                                  onSelect={() => {
-                                    form.setValue("animalId", animal.id);
-                                  }}
+                            <CommandList>
+                              <CommandEmpty>
+                                {animalFetchFailed ? 
+                                  "Could not load animals. Please try again later." : 
+                                  "No animal found with that name."}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {isLoadingAnimals ? (
+                                  <CommandItem key="loading">
+                                    <span className="flex items-center gap-2">
+                                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+                                      Loading animals...
+                                    </span>
+                                  </CommandItem>
+                                ) : animals.length === 0 ? (
+                                  <CommandItem key="empty">
+                                    No animals available
+                                  </CommandItem>
+                                ) : animals.map((animal) => (
+                                  <CommandItem
+                                    key={animal.id}
+                                    value={animal.id}
+                                    onSelect={() => {
+                                      form.setValue("animalId", animal.id);
+                                    }}
                                 >
                                   <Check
                                     className={cn(
@@ -362,6 +413,7 @@ export function AddAlertDialog({ open, onOpenChange, onSuccess }: AddAlertDialog
                                 </CommandItem>
                               ))}
                             </CommandGroup>
+                            </CommandList>
                           </Command>
                         </PopoverContent>
                       </Popover>

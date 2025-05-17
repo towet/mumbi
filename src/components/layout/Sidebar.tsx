@@ -133,7 +133,7 @@ export function AppSidebar() {
       <div className="mb-4 p-4">
         <div className="flex items-center gap-3 mb-6 pt-2">
           <div className="h-16 w-16 flex items-center justify-center transition-all duration-300 hover:scale-105">
-            <img src="/LOGOFARM.png" alt="Mumbi Farm Logo" className="w-full h-full object-contain" />
+            <img src="/Mumbi Farm Logo-01.png" alt="Mumbi Farm Logo" className="w-full h-full object-contain" />
           </div>
           <div className="space-y-1">
             <div className="font-semibold text-xl bg-gradient-to-r from-farm-green to-emerald-500 bg-clip-text text-transparent">Mumbi Farm</div>

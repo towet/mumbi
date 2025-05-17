@@ -21,13 +21,14 @@ import {
 } from "@/components/ui/select";
 import { Search, Plus, AlertCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface AlertsListProps {
   onAddAlert: () => void;
 }
 
 export function AlertsList({ onAddAlert }: AlertsListProps) {
-  const { toast } = useToast();
+  const { toast: useToastHook } = useToast();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,15 +40,60 @@ export function AlertsList({ onAddAlert }: AlertsListProps) {
     fetchAlerts();
   }, []);
   
+  // Add a refresh flag to trigger alert reload
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Function to trigger a refresh
+  const refreshAlerts = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+  
+  // Set the refresh trigger when adding a new alert
+  useEffect(() => {
+    const handleAlertAdded = () => {
+      refreshAlerts();
+    };
+    
+    // Listen for the custom alert-added event
+    window.addEventListener('alert-added', handleAlertAdded);
+    
+    return () => {
+      window.removeEventListener('alert-added', handleAlertAdded);
+    };
+  }, []);
+  
+  // Update fetch to use refresh trigger
+  useEffect(() => {
+    fetchAlerts();
+  }, [refreshTrigger]);
+
   async function fetchAlerts() {
     try {
       setLoading(true);
+      console.log('Fetching alerts from database...');
+      
+      // Attempt to get alerts from Supabase
       const { data, error } = await supabase
         .from('alerts')
         .select('*, animals(id, name, tag_number), profiles(id, first_name, last_name)')
         .order('due_date', { ascending: true });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        toast.error("Database Error", {
+          description: "Failed to fetch alerts: " + error.message
+        });
+        setAlerts([]);
+        return;
+      }
+      
+      console.log('Alerts data received:', data); // Add this for debugging
+      
+      if (!data) {
+        console.log('No data returned from database');
+        setAlerts([]);
+        return;
+      }
       
       // Transform the data to match the expected format
       const formattedAlerts = data.map(alert => ({
@@ -66,16 +112,13 @@ export function AlertsList({ onAddAlert }: AlertsListProps) {
         updatedAt: alert.updated_at
       }));
       
+      console.log('Formatted alerts:', formattedAlerts); // Add this for debugging
       setAlerts(formattedAlerts);
     } catch (error) {
       console.error('Error fetching alerts:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load alerts",
-        variant: "destructive"
+      toast.error("Error", {
+        description: "Failed to load alerts"
       });
-      
-      // Fall back to empty array
       setAlerts([]);
     } finally {
       setLoading(false);
