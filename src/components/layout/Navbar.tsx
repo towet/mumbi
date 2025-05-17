@@ -95,8 +95,13 @@ export function Navbar({ className, menuButton }: { className?: string; menuButt
         description: "You have been logged out successfully"
       });
       
-      // Redirect to home/login page
+      // Navigate to login page
       navigate('/');
+      
+      // Force a complete page refresh to reset all application state
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
     } catch (error) {
       console.error("Error logging out:", error);
       toast({

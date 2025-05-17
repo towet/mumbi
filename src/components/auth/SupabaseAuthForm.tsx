@@ -214,9 +214,7 @@ export function SupabaseAuthForm({ onAuthSuccess }: SupabaseAuthFormProps) {
         className="w-full max-w-md"
       >
         <div className="flex justify-center mb-8">
-          <div className="h-32 w-32 flex items-center justify-center shadow-xl mb-2">
-            <img src="/LOGOFARM.png" alt="Mumbi Farm Logo" className="w-full h-full object-contain" />
-          </div>
+          <img src="/Mumbi Farm Logo-01.png" alt="Mumbi Farm Logo" className="h-32 object-contain" />
         </div>
         
         <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm">
