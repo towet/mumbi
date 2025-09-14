@@ -1,0 +1,316 @@
+
+import { useState } from "react";
+import { Helmet } from "react-helmet";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Download, Printer, FileSpreadsheet, Edit } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { GenerateReportDialog } from "@/components/reports/GenerateReportDialog";
+import { PrintPreviewDialog } from "@/components/reports/PrintPreviewDialog";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import { toast } from "sonner";
+
+const reportCategories = [
+  {
+    title: "Inventory Reports",
+    reports: [
+      { id: "1", name: "Current Flock Summary", description: "Complete inventory of all animals" },
+      { id: "2", name: "Breeding Stock Report", description: "List of all active breeding animals" },
+      { id: "3", name: "Age Distribution", description: "Analysis of flock by age groups" },
+    ]
+  },
+  {
+    title: "Health Reports",
+    reports: [
+      { id: "4", name: "Vaccination Status", description: "Vaccination records and upcoming schedules" },
+      { id: "5", name: "Health Incidents", description: "Summary of illnesses and treatments" },
+      { id: "6", name: "Mortality Report", description: "Analysis of animal losses and causes" },
+    ]
+  },
+  {
+    title: "Breeding Reports",
+    reports: [
+      { id: "7", name: "Breeding Performance", description: "Success rates and outcomes" },
+      { id: "8", name: "Lambing Statistics", description: "Details on lambing rates and survival" },
+      { id: "9", name: "Genetic Analysis", description: "Bloodline tracking and trait inheritance" },
+    ]
+  },
+  {
+    title: "Financial Reports",
+    reports: [
+      { id: "10", name: "Revenue Summary", description: "Income from all farm activities" },
+      { id: "11", name: "Expense Analysis", description: "Breakdown of all farm expenses" },
+      { id: "12", name: "Profitability Report", description: "Analysis of farm profitability" },
+    ]
+  },
+];
+
+export default function Reports() {
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [showPrintPreviewDialog, setShowPrintPreviewDialog] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [selectedReportName, setSelectedReportName] = useState<string>("");
+  const [isDownloading, setIsDownloading] = useState<{[key: string]: boolean}>({});
+
+  const handleGenerateClick = (reportId: string) => {
+    setSelectedReportId(reportId);
+    setShowGenerateDialog(true);
+  };
+
+  const handlePrintPreviewClick = (reportId: string, reportName: string) => {
+    setSelectedReportId(reportId);
+    setSelectedReportName(reportName);
+    setShowPrintPreviewDialog(true);
+  };
+  
+  const handleEditReportClick = (reportId: string, reportName: string) => {
+    setSelectedReportId(reportId);
+    setSelectedReportName(reportName);
+    setShowPrintPreviewDialog(true);
+    // The preview dialog will provide editing capabilities
+  };
+  
+  const handleDownloadReport = async (reportId: string, reportName: string) => {
+    // Set loading state for this specific report
+    setIsDownloading(prev => ({ ...prev, [reportId]: true }));
+    
+    try {
+      // Create a temporary div to generate the report content
+      const tempDiv = document.createElement('div');
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.top = '-9999px';
+      document.body.appendChild(tempDiv);
+      
+      // Generate sample report data based on reportId
+      const reportData = generateSampleReportData(reportId);
+      
+      // Add content to the temporary div
+      tempDiv.innerHTML = `
+        <div class="report-container" style="font-family: Arial, sans-serif; padding: 20px; width: 800px; background: white;">
+          <div class="report-header" style="text-align: center; margin-bottom: 30px; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
+            <h2 style="font-size: 24px; color: #2c6e49; margin-bottom: 5px;">${reportName}</h2>
+            <p style="color: #666; margin: 0;">Generated on ${new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <div class="report-content" style="margin-bottom: 20px;">
+            ${reportData.content.map(section => `
+              <div class="report-section" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h3 style="margin-top: 0; margin-bottom: 8px; color: #2c6e49; font-size: 18px;">${section.header}</h3>
+                <p style="margin: 0; line-height: 1.6;">${section.text}</p>
+              </div>
+            `).join('')}
+          </div>
+          
+          <div class="report-footer" style="margin-top: 40px; text-align: center; font-size: 12px; color: #666;">
+            <p>Generated by Mumbi Farm Management on ${new Date().toLocaleDateString()}</p>
+          </div>
+        </div>
+      `;
+      
+      // Convert to canvas
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      // Remove temporary div
+      document.body.removeChild(tempDiv);
+      
+      // Create PDF
+      const imgWidth = 210;
+      const imgHeight = canvas.height * imgWidth / canvas.width;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // Add title
+      pdf.setFontSize(16);
+      pdf.text(`${reportName}`, 105, 15, { align: 'center' });
+      pdf.setFontSize(10);
+      pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
+      
+      // Add content
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 30, imgWidth, imgHeight);
+      
+      // Add footer
+      pdf.setFontSize(8);
+      pdf.text(
+        `Generated by Mumbi Farm Management`,
+        105,
+        pdf.internal.pageSize.height - 10,
+        { align: 'center' }
+      );
+      
+      // Save PDF
+      pdf.save(`${reportName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      toast.success("Report downloaded successfully", {
+        description: `${reportName} has been saved as a PDF.`,
+      });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast.error("Failed to generate PDF", {
+        description: "An error occurred while creating your PDF. Please try again."
+      });
+    } finally {
+      setIsDownloading(prev => ({ ...prev, [reportId]: false }));
+    }
+  };
+  
+  // Helper function to generate sample report data
+  const generateSampleReportData = (reportId: string) => {
+    const reportTypes: Record<string, any> = {
+      "1": {
+        title: "Current Flock Summary",
+        date: new Date().toLocaleDateString(),
+        content: [
+          { header: "Flock Overview", text: "Total animals: 120" },
+          { header: "Breed Distribution", text: "Merino: 40%, Suffolk: 30%, Dorper: 20%, Other: 10%" },
+          { header: "Age Distribution", text: "Under 1 year: 35%, 1-3 years: 40%, 3+ years: 25%" },
+          { header: "Health Status", text: "Healthy: 95%, Requires attention: 5%" },
+          { header: "Vaccination Status", text: "Up to date: 98%, Pending: 2%" }
+        ]
+      },
+      "2": {
+        title: "Breeding Stock Report",
+        date: new Date().toLocaleDateString(),
+        content: [
+          { header: "Breeding Rams", text: "Total: 5, Average age: 2.5 years" },
+          { header: "Breeding Ewes", text: "Total: 45, Average age: 3.2 years" },
+          { header: "Recent Breeding Activity", text: "Matings in last 30 days: 12" },
+          { header: "Expected Births", text: "Next 30 days: 8, Next 60 days: 15" }
+        ]
+      },
+      "3": {
+        title: "Age Distribution",
+        date: new Date().toLocaleDateString(),
+        content: [
+          { header: "Lambs (0-6 months)", text: "Total: 35, Male: 16, Female: 19" },
+          { header: "Juveniles (6-12 months)", text: "Total: 22, Male: 10, Female: 12" },
+          { header: "Adults (1-4 years)", text: "Total: 48, Male: 8, Female: 40" },
+          { header: "Seniors (4+ years)", text: "Total: 15, Male: 3, Female: 12" }
+        ]
+      },
+    };
+  
+    return reportTypes[reportId] || {
+      title: "Sample Report",
+      date: new Date().toLocaleDateString(),
+      content: [
+        { header: "No Data Available", text: "This is a placeholder for report data." }
+      ]
+    };
+  };
+
+  return (
+    <>
+      <Helmet>
+        <title>Reports | Mumbi Farm Management</title>
+      </Helmet>
+      
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+            <p className="text-muted-foreground">
+              Generate and access detailed farm reports
+            </p>
+          </div>
+          
+          <Button 
+            className="flex items-center gap-2 bg-farm-green hover:bg-farm-green/90"
+            onClick={() => setShowGenerateDialog(true)}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>Generate New Report</span>
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 gap-6">
+          {reportCategories.map((category, index) => (
+            <Card key={category.title} className="animate-fade-in" style={{ animationDelay: `${0.1 * index}s` }}>
+              <CardHeader>
+                <CardTitle>{category.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {category.reports.map((report) => (
+                    <div 
+                      key={report.id} 
+                      className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-start gap-3 mb-3 sm:mb-0">
+                        <div className="p-2 bg-farm-green/10 rounded-md">
+                          <FileText className="h-5 w-5 text-farm-green" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium">{report.name}</h4>
+                          <p className="text-sm text-muted-foreground">{report.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1 sm:flex-none"
+                          onClick={() => handlePrintPreviewClick(report.id, report.name)}
+                        >
+                          <Printer className="h-4 w-4 mr-1" />
+                          Print
+                        </Button>
+                        <Button 
+                          variant="secondary"
+                          size="sm" 
+                          className="flex-1 sm:flex-none"
+                          onClick={() => handleEditReportClick(report.id, report.name)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="flex-1 sm:flex-none bg-farm-green hover:bg-farm-green/90"
+                          onClick={() => handleDownloadReport(report.id, report.name)}
+                          disabled={isDownloading[report.id]}
+                        >
+                          {isDownloading[report.id] ? (
+                            <>
+                              <span className="h-4 w-4 mr-1 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <GenerateReportDialog 
+        open={showGenerateDialog} 
+        onOpenChange={setShowGenerateDialog} 
+      />
+      
+      {selectedReportId && (
+        <PrintPreviewDialog
+          open={showPrintPreviewDialog}
+          onOpenChange={setShowPrintPreviewDialog}
+          reportId={selectedReportId}
+          reportName={selectedReportName}
+        />
+      )}
+    </>
+  );
+}
